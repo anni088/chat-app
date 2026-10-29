@@ -145,9 +145,11 @@ http://localhost:5173
 * Notifications for new messages
 * Improved mobile responsiveness
 
-## 👨‍💻 Author
+## 🌐 Live Demo
+Try the application: https://chat-app-ten-rho-55.vercel.app/
 
-**Aniruddh Singh**
+## 📂 GitHub Repository
+Source code: https://github.com/anni088/chat-app
 
 GitHub: [@anni088](https://github.com/anni088)
 
