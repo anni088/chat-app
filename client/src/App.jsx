@@ -1,28 +1,30 @@
 import { useState } from 'react';
-import { socket } from './socket';
+import './App.css';
+import { AuthProvider, useAuth } from './AuthContext';
 import JoinForm from './components/JoinForm';
 import ChatRoom from './components/ChatRoom';
+import Login from './components/Login';
 
-import './App.css';
+function Main() {
+  const { user, loading } = useAuth();
+  const [room, setRoom] = useState(null);
 
-export default function App() {
-  const [joined, setJoined] = useState(false);
-  const [identity, setIdentity] = useState({ username: '', room: '' });
-
-  const handleJoin = ({ username, room }) => {
-    socket.connect();
-    socket.emit('join', { username, room });
-    setIdentity({ username, room });
-    setJoined(true);
-  };
+  if (loading) return <div className="app">Loading...</div>;
+  if (!user) return <div className="app"><Login /></div>;
 
   return (
     <div className="app">
-      {joined ? (
-        <ChatRoom username={identity.username} room={identity.room} />
-      ) : (
-        <JoinForm onJoin={handleJoin} />
-      )}
+      {room
+        ? <ChatRoom room={room} onLeave={() => setRoom(null)} />
+        : <JoinForm onJoin={setRoom} />}
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <Main />
+    </AuthProvider>
   );
 }

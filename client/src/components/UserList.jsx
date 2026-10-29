@@ -1,9 +1,11 @@
-export default function UserList({ users }) {
+export default function UserList({ users=[] }) {
+  const userList = Array.isArray(users) ? users : [];
+
   return (
     <div className="user-list">
-      <h3>Online ({users.length})</h3>
+      <h3>Online ({userList.length})</h3>
       <ul>
-        {users.map((u) => (
+        {userList.map((u) => (
           <li key={u}>{u}</li>
         ))}
       </ul>

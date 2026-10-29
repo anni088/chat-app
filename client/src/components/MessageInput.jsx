@@ -17,7 +17,9 @@ export default function MessageInput() {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+
     if (!text.trim()) return;
+
     socket.emit('chat-message', text.trim());
     setText('');
     socket.emit('typing', false);

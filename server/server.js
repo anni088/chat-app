@@ -3,23 +3,31 @@ const http = require('http');
 const cors = require('cors');
 const connectDB = require('./config/db');
 const { Server } = require('socket.io');
-const dotenv = require('dotenv');
-const { log } = require("console");
 const User = require("./models/User");
 const Message = require("./models/Message");
+const authRoutes = require('./routes/auth');
+const { verifyToken } = require("./middleware/auth");
 
 require('dotenv').config();
 
+if (!process.env.JWT_SECRET) {
+  console.error('JWT_SECRET is not set');
+  process.exit(1);
+}
+
+
 const app = express();
+app.set('trust proxy', 1);
 
 const allowedOrigins = [
   'http://localhost:5173',
   process.env.CLIENT_URL,
-];
+].filter(Boolean);
 
 app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use('/api/auth', authRoutes);
 
 const server = http.createServer(app);
 
@@ -32,33 +40,50 @@ const io = new Server(server, {
 
 const PORT = process.env.PORT;
 
+// --- Socket authentication: runs before any connection is accepted ---
+io.use((socket, next) => {
+    const token = socket.handshake.auth?.token;
+    if(!token) return next(new Error('Authentication required'));
+
+    try {
+        const { id, username, role } = verifyToken(token);
+        socket.data.user = { id, username, role };
+        next(); 
+    } catch (err) {
+        next(new Error('Invalid or Expired token'));
+    }
+});
+
+async function emitUserList(room) {
+    const sockets = await io.in(room).fetchSockets();
+    const names = [...new Set(sockets.map((s) => s.data.user.username))];
+    io.to(room).emit('user-list', names);
+}
+
 io.on('connection', (socket) => {
-    console.log('User connected: ', socket.id);
+    const { username, role } = socket.data.user;
+    console.log('User connected: ', username, socket.id);
 
-    socket.on('join', async ({ username, room = 'general'}) => {
+    socket.on('join', async ({ room } = {}) => {
         try {
-            username = username.trim().slice(0, 24);
-            socket.data.username = username;
+            room = String(room || 'general').trim().slice(0, 32) || 'general';
+
+            const prev = socket.data.room;
+            if(prev && prev !== room) {
+                socket.leave(prev);
+                socket.io(prev).emit('user-left', { username });
+                await emitUserList(prev);
+            }
+
             socket.data.room = room;
-
             socket.join(room);
-
-            // Upsert user as online
-            await User.findOneAndUpdate(
-                { username },
-                { username, socketId: socket.id, isOnline: true },
-                { upsert: true } //if user exist update it, if not create it
-            );
 
             const history  = await Message.find({ room })
             .sort({ createdAt: 1 }) //sort : oldest to newest
             .limit(50);
             socket.emit('history', history);
 
-            //Broadcast updated online users list
-            const onlineUsers = await User.find({ isOnline: true }).select('username');
-            io.to(room).emit('user-list', onlineUsers.map(u => u.username));
-
+            await emitUserList(room);
             socket.to(room).emit('user-joined', { username });
         } catch (error) {
             console.error('Join error: ', error);
@@ -67,8 +92,13 @@ io.on('connection', (socket) => {
 
     socket.on('chat-message', async (text) => {
         try {
-            const { username, room } = socket.data;
-            if(!username || !room) return;
+    console.log(socket.data);
+
+            const { room } = socket.data;
+            if(!room || typeof text !== 'string') return;
+
+    console.log("msgInput handle submit2");
+
             text = text.trim().slice(0, 1000);
             if(!text) return;
             
@@ -79,25 +109,35 @@ io.on('connection', (socket) => {
         }
     });
 
+    // AUTHORIZATION: owner or admin only
+    socket.on('delete-message', async (messageId) => {
+        try {
+            const msg = await Message.findById(messageId);
+            if(!msg) return;
+            if(msg.username !== username && role !== 'admin') return;
+
+            await msg.deleteOne();
+            io.to(msg.room).emit('message-deleted', String(msg.id));
+        } catch (err) {
+            console.error('Delete error:', err);
+        }
+    });
+
     socket.on('typing', (isTyping) => {
-        const { username, room } = socket.data;
-        if( !username || !room) return;
+        const { room } = socket.data;
+        if(!room) return;
 
         socket.to(room).emit('typing', { username, isTyping: !!isTyping });
     });
     
     socket.on('disconnect', async () => {
         try {
-            const { username, room } = socket.data;
-            if(!username) return;
+            const { room } = socket.data;
+            if(!room) return;
 
-            await User.findOneAndUpdate({ username, socketId: socket.id }, { isOnline: false, socketId: null });
+            socket.to(room).emit('user-list', { username });
+            await emitUserList(room);
 
-            if(room) {
-                const onlineUsers = await User.find({ isOnline: true }).select('username');
-                io.to(room).emit('user-list', onlineUsers.map(u => u.username));
-                socket.to(room).emit('user-list', {username });
-            }
             console.log('User disconnected: ', socket.id);
         } catch (error) {
             console.error('Disconnet Error: ', error);

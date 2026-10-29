@@ -1,0 +1,17 @@
+# Environment variables
+.env
+server/.env
+client/.env
+
+# Dependencies
+node_modules/
+client/node_modules/
+server/node_modules/
+
+# Build files
+client/build/
+client/dist/
+
+# Logs
+*.log
+npm-debug.log*

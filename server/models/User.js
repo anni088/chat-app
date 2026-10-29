@@ -6,15 +6,29 @@ const userSchema = new  mongoose.Schema({
         required: true,
         unique: true,
         trim: true,
-        maxlength: 24
+        minlength: 3,
+        maxlength: 24,
+        match: /^[a-zA-Z0-9_]+$/,
     },
-    socketId: {
+    // socketId: {
+    //     type: String,
+    //     default: null,
+    // },
+    // isOnline: {
+    //     type: Boolean,
+    //     default: false,
+    // },
+
+    password: {
         type: String,
-        default: null,
+        required: true,
+        select: false,
     },
-    isOnline: {
-        type: Boolean,
-        default: false,
+
+    role: {
+        type: String,
+        enum: ['user', 'admin'],
+        default: 'user',
     },
 }, { timestamps: true });
 
